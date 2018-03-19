@@ -4,10 +4,14 @@
 
 using namespace std;
 
-SC_Server::SC_Server(unsigned int port, unsigned int maxClients) : server(port) {
+SC_Server::SC_Server(std::string ip, unsigned int port, unsigned int maxClients) : server(ip, port) {
 
 	setMaxClients(maxClients);//Also initiates/modifies clients array
 
+}
+
+SC_Server::SC_Server(unsigned int port, unsigned int maxClients) : server(port) {
+	setMaxClients(maxClients);
 }
 
 SC_Server::~SC_Server() {

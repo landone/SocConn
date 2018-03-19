@@ -17,6 +17,7 @@ Functions for receiving data must be defined
 class SC_Server {
 public:
 
+	SC_Server(std::string ip, unsigned int port, unsigned int maxClients);
 	SC_Server(unsigned int port, unsigned int maxClients);
 	~SC_Server();
 
