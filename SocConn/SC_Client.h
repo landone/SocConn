@@ -26,16 +26,18 @@ public:
 	void send(int val);
 	void send(const char* buf, int len);
 
-	virtual void onString(std::string msg) = 0;
-	virtual void onInt(int value) = 0;
-	virtual void onBytes(const char* buf, int len) = 0;//Char* received should be deleted
-
 	std::string getIP() { return me.getIP(); }
 	int getPort() { return me.getPort(); }
 	bool isConnected() { return me.isConnected(); }
 
 	void setIP(std::string ip) { me.setIP(ip); }
 	void setPort(int port) { me.setPort(port); }
+
+protected:
+
+	virtual void onString(std::string msg) = 0;
+	virtual void onInt(int value) = 0;
+	virtual void onBytes(const char* buf, int len) = 0;//Char* received should be deleted
 
 private:
 

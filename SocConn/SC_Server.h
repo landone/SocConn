@@ -31,12 +31,6 @@ public:
 	void sendToAll(int val);
 	void sendToAll(const char* buf, int len);
 
-	virtual void onString(int client, std::string msg) = 0;
-	virtual void onInt(int client, int value) = 0;
-	virtual void onBytes(int client, const char* buf, int len) = 0;//Char* received should be deleted
-	virtual void onConnect(int client) = 0;
-	virtual void onDisconnect(int client, bool timeout) = 0;
-
 	void kick(unsigned int clientID);
 	void kickAll();
 
@@ -49,6 +43,14 @@ public:
 
 	void setPort(int port);
 	void setMaxClients(unsigned int maxClients);
+
+protected:
+
+	virtual void onString(int client, std::string msg) = 0;
+	virtual void onInt(int client, int value) = 0;
+	virtual void onBytes(int client, const char* buf, int len) = 0;//Char* received should be deleted
+	virtual void onConnect(int client) = 0;
+	virtual void onDisconnect(int client, bool timeout) = 0;
 
 private:
 
