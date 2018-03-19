@@ -20,37 +20,52 @@ SC_Server::~SC_Server() {
 
 void SC_Server::send(int id, string msg) {
 
+	if (!isValidID(id)) {
+		return;
+	}
 	clients[id]->soc->send(msg);
 
 }
 
 void SC_Server::send(int id, int val) {
 
+	if (!isValidID(id)) {
+		return;
+	}
 	clients[id]->soc->send(val);
 
 }
 
 void SC_Server::send(int id, const char* buf, int len) {
 
+	if (!isValidID(id)) {
+		return;
+	}
 	clients[id]->soc->sendBytes(buf, len);
 
 }
 
 void SC_Server::sendToAll(string msg) {
-	for (unsigned int i = 0; i < clientCount; i++) {
-		clients[i]->soc->send(msg);
+	for (unsigned int i = 0; i < maxClients; i++) {
+		if (clients[i] != nullptr) {
+			clients[i]->soc->send(msg);
+		}
 	}
 }
 
 void SC_Server::sendToAll(int val) {
-	for (unsigned int i = 0; i < clientCount; i++) {
-		clients[i]->soc->send(val);
+	for (unsigned int i = 0; i < maxClients; i++) {
+		if (clients[i] != nullptr) {
+			clients[i]->soc->send(val);
+		}
 	}
 }
 
 void SC_Server::sendToAll(const char* buf, int len) {
-	for (unsigned int i = 0; i < clientCount; i++) {
-		clients[i]->soc->sendBytes(buf, len);
+	for (unsigned int i = 0; i < maxClients; i++) {
+		if (clients[i] != nullptr) {
+			clients[i]->soc->sendBytes(buf, len);
+		}
 	}
 }
 
@@ -107,8 +122,8 @@ void SC_Server::connectThread() {//Accepts new connections
 		for (unsigned int i = 0; i < maxClients; i++) {//Look for open index
 			if (clients[i] == nullptr) {
 				clients[i] = new SC_ClientHandle{ nullptr, client, false };//Establish data before starting thread
-				clients[i]->thr = (char*)new thread(&SC_Server::clientThread, this, i);
 				clientCount++;
+				clients[i]->thr = (char*)new thread(&SC_Server::clientThread, this, i);
 				onConnect(i);
 				break;
 			}
