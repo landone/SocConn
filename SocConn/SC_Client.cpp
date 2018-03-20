@@ -30,7 +30,7 @@ void SC_Client::send(int val) {
 
 void SC_Client::send(const char* buf, int len) {
 
-	me.sendBytes(buf, len);
+	me.send(buf, len);
 
 }
 
@@ -80,8 +80,6 @@ void SC_Client::mainThread() {
 		}
 
 		switch (pack) {
-		case Packet_PING:
-			break;
 		case Packet_INT:
 			onInt(me.receiveInt());
 			break;

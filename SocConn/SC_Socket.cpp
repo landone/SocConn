@@ -99,12 +99,6 @@ void SC_Socket::disconnect() {
 
 }
 
-void SC_Socket::ping() {
-
-	sendPacket(Packet_PING);
-	
-}
-
 void SC_Socket::send(int num) {
 
 	sendPacket(Packet_INT);
@@ -188,7 +182,7 @@ void SC_Socket::send(std::string msg) {
 
 }
 
-void SC_Socket::sendBytes(const char* bytes, int length) {
+void SC_Socket::send(const char* bytes, int length) {
 
 	sendPacket(Packet_BYTES);
 	send(length);

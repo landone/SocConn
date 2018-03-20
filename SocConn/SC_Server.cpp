@@ -45,7 +45,7 @@ void SC_Server::send(int id, const char* buf, int len) {
 	if (!isValidID(id)) {
 		return;
 	}
-	clients[id]->soc->sendBytes(buf, len);
+	clients[id]->soc->send(buf, len);
 
 }
 
@@ -68,7 +68,7 @@ void SC_Server::sendToAll(int val) {
 void SC_Server::sendToAll(const char* buf, int len) {
 	for (unsigned int i = 0; i < maxClients; i++) {
 		if (clients[i] != nullptr) {
-			clients[i]->soc->sendBytes(buf, len);
+			clients[i]->soc->send(buf, len);
 		}
 	}
 }
@@ -164,8 +164,6 @@ void SC_Server::clientThread(unsigned int id) {
 		}
 
 		switch (pack) {
-		case Packet_PING:
-			break;
 		case Packet_INT:
 			onInt(id, clients[id]->soc->receiveInt());
 			break;

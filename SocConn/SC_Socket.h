@@ -1,7 +1,7 @@
 /*
 
 	SC_Socket
-	(UDP/TCP : IPV4)
+	(TCP/UDP : IPV4)
 	----------------
 Fundamental class that organizes common operations of a WinSock socket.
 Offers functions and enum of common packet types.
@@ -17,7 +17,6 @@ Changing properties such as IP, port, or protocol require reconnection.
 
 enum Packet {
 	Packet_ERROR,
-	Packet_PING,
 	Packet_INT,
 	Packet_BYTES,
 	Packet_STRING,
@@ -39,10 +38,9 @@ public:
 	void disconnect();
 	bool hasData(long timeout);
 
-	void ping();
 	void send(int val);
 	void send(std::string msg);
-	void sendBytes(const char* bytes, int length);
+	void send(const char* bytes, int length);
 
 	Packet receivePacket();
 	int receiveInt();
