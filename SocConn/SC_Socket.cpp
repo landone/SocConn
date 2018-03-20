@@ -11,34 +11,39 @@ void SC_Socket::cleanUpAll() {
 
 }
 
-SC_Socket::SC_Socket(unsigned int socket, bool extraParam) {
+SC_Socket::SC_Socket(unsigned int socket, char* extraParam) {
 
 	mySoc = socket;
-	readfds = (char*)new fd_set;
-	
 	connected = true;
+	readfds = (char*)new fd_set;
+
+	int type = 0;
+	int len = sizeof(int);
+	getsockopt(mySoc, SOL_SOCKET, SO_TYPE, (char*)&type, &len);
+	TCP = (type == SOCK_STREAM);
 
 	struct sockaddr_in ad;
-	int len;
+	len = 0;
 	getpeername(mySoc, (struct sockaddr*)&ad, &len);
 
 	addr = (char*)new SOCKADDR_IN(ad);
 
 	this->ip = inet_ntoa((in_addr)ad.sin_addr);
 	this->port = ntohs(ad.sin_port);
-
+	
 }
 
-SC_Socket::SC_Socket(unsigned int port) : SC_Socket("127.0.0.1", port) {
+SC_Socket::SC_Socket(unsigned int port, bool TCP) : SC_Socket("127.0.0.1", port, TCP) {
 
 	//Do nothing
 
 }
 
-SC_Socket::SC_Socket(string ip, unsigned int port) {
+SC_Socket::SC_Socket(string ip, unsigned int port, bool TCP) {
 
 	this->ip = ip;
 	this->port = port;
+	this->TCP = TCP;
 	readfds = (char*)new fd_set;
 
 	if (!wsaEnabled) {
@@ -205,10 +210,16 @@ void SC_Socket::setPort(unsigned int port) {
 
 }
 
+void SC_Socket::setProtocol(bool TCP) {
+
+	this->TCP = TCP;
+
+}
+
 void SC_Socket::open() {
 
 	connected = true;
-	mySoc = socket(AF_INET, SOCK_STREAM, NULL);
+	mySoc = socket(AF_INET, (TCP ? SOCK_STREAM : SOCK_DGRAM), NULL);
 	FD_ZERO(readfds);
 	FD_SET(mySoc, readfds);
 	bind(mySoc, (SOCKADDR*)addr, sizeof(SOCKADDR_IN));
@@ -226,7 +237,7 @@ SC_Socket* SC_Socket::acquire() {
 		return nullptr;
 	}
 	
-	return new SC_Socket(newConn, true);
+	return new SC_Socket(newConn, nullptr);
 
 }
 
@@ -236,7 +247,7 @@ bool SC_Socket::join() {
 		return false;
 	}
 
-	mySoc = socket(AF_INET, SOCK_STREAM, NULL);
+	mySoc = socket(AF_INET, (TCP ? SOCK_STREAM : SOCK_DGRAM), NULL);
 	FD_ZERO(readfds);
 	FD_SET(mySoc, readfds);
 
