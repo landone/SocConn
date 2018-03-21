@@ -1,8 +1,8 @@
 /*
 
 	SC_Server
-	(TCP/IPV4)
-	---------
+	(TCP/UDP : IPV4)
+	----------------
 Abstract class that interprets sockets as a server would.
 Sends & receives packets with clients
 Clients are organized by an ID (unchanging integer)
@@ -13,6 +13,12 @@ Functions for receiving data must be defined
 #pragma once
 
 #include "SC_Socket.h"
+
+/*
+
+TODO: Make send/receive functions safe & supportive of UDP
+
+*/
 
 class SC_Server {
 public:
@@ -36,11 +42,11 @@ public:
 	void kickAll();
 
 	bool isRunning() {
-		return server.isConnected();
+		return server[0].isConnected();
 	}
 	int getClientCount() { return clientCount; }
 	int getMaxClients() { return maxClients; }
-	int getPort() { return server.getPort(); }
+	int getPort() { return server[0].getPort(); }
 
 	void setPort(int port);
 	void setMaxClients(unsigned int maxClients);
@@ -56,8 +62,8 @@ protected:
 private:
 
 	struct SC_ClientHandle {
-		char* thr;
-		SC_Socket* soc;
+		char* thr[2];
+		SC_Socket* soc[2];
 		bool stopMe;
 	};
 
@@ -66,7 +72,7 @@ private:
 	unsigned int maxClients = 0;
 	bool stopThreads = false;
 
-	SC_Socket server;
+	SC_Socket server[2];
 	char* connThr;
 
 	SC_ClientHandle** clients = nullptr;
@@ -74,6 +80,6 @@ private:
 	bool isValidID(unsigned int id);
 
 	void connectThread();
-	void clientThread(unsigned int id);
+	void clientThread(unsigned int id, SC_SocType socType);
 
 };

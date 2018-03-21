@@ -4,13 +4,13 @@
 
 using namespace std;
 
-SC_Server::SC_Server(std::string ip, unsigned int port, unsigned int maxClients) : server(ip, port) {
+SC_Server::SC_Server(std::string ip, unsigned int port, unsigned int maxClients) : server{ (ip, port), (ip, port, false) } {
 
 	setMaxClients(maxClients);//Also initiates/modifies clients array
 
 }
 
-SC_Server::SC_Server(unsigned int port, unsigned int maxClients) : server(port) {
+SC_Server::SC_Server(unsigned int port, unsigned int maxClients) : server{ (port), (port, false) } {
 	setMaxClients(maxClients);
 }
 
@@ -27,7 +27,7 @@ void SC_Server::send(int id, string msg) {
 	if (!isValidID(id)) {
 		return;
 	}
-	clients[id]->soc->send(msg);
+	clients[id]->soc[SC_TCP]->send(msg);
 
 }
 
@@ -36,7 +36,7 @@ void SC_Server::send(int id, int val) {
 	if (!isValidID(id)) {
 		return;
 	}
-	clients[id]->soc->send(val);
+	clients[id]->soc[SC_TCP]->send(val);
 
 }
 
@@ -45,14 +45,14 @@ void SC_Server::send(int id, const char* buf, int len) {
 	if (!isValidID(id)) {
 		return;
 	}
-	clients[id]->soc->send(buf, len);
+	clients[id]->soc[SC_TCP]->send(buf, len);
 
 }
 
 void SC_Server::sendToAll(string msg) {
 	for (unsigned int i = 0; i < maxClients; i++) {
 		if (clients[i] != nullptr) {
-			clients[i]->soc->send(msg);
+			clients[i]->soc[SC_TCP]->send(msg);
 		}
 	}
 }
@@ -60,7 +60,7 @@ void SC_Server::sendToAll(string msg) {
 void SC_Server::sendToAll(int val) {
 	for (unsigned int i = 0; i < maxClients; i++) {
 		if (clients[i] != nullptr) {
-			clients[i]->soc->send(val);
+			clients[i]->soc[SC_TCP]->send(val);
 		}
 	}
 }
@@ -68,7 +68,7 @@ void SC_Server::sendToAll(int val) {
 void SC_Server::sendToAll(const char* buf, int len) {
 	for (unsigned int i = 0; i < maxClients; i++) {
 		if (clients[i] != nullptr) {
-			clients[i]->soc->send(buf, len);
+			clients[i]->soc[SC_TCP]->send(buf, len);
 		}
 	}
 }
@@ -76,7 +76,8 @@ void SC_Server::sendToAll(const char* buf, int len) {
 void SC_Server::start() {
 
 	if (!isRunning()) {
-		server.open();
+		server[SC_TCP].open();
+		server[SC_UDP].open();
 		connThr = (char*)new thread(&SC_Server::connectThread, this);
 	}
 
@@ -93,7 +94,8 @@ void SC_Server::stop() {
 
 		kickAll();
 
-		server.disconnect();
+		server[SC_TCP].disconnect();
+		server[SC_UDP].disconnect();
 	}
 
 }
@@ -108,38 +110,63 @@ void SC_Server::connectThread() {//Accepts new connections
 			return;
 		}
 
-		if (!server.hasData(50)) {
-			continue;
-		}
+		for (unsigned int i = 0; i < 2; i++) {//Go through both TCP & UDP
 
-		client = server.acquire();
-		if (client == nullptr) {
-			continue;
-		}
+			if (server[i].hasData(50)) {
 
-		if (clientCount >= maxClients) {
-			client->disconnect();
-			delete client;
-			continue;
-		}
+				client = server[i].acquire();
+				if (client == nullptr) {
+					continue;
+				}
 
-		for (unsigned int i = 0; i < maxClients; i++) {//Look for open index
-			if (clients[i] == nullptr) {
-				clients[i] = new SC_ClientHandle{ nullptr, client, false };//Establish data before starting thread
-				clientCount++;
-				clients[i]->thr = (char*)new thread(&SC_Server::clientThread, this, i);
-				onConnect(i);
-				break;
+				bool matched = false;
+				for (unsigned int u = 0; u < maxClients; u++) {//Look for matching alternate socket
+					if (clients[u] != nullptr && clients[u]->soc[i] == nullptr) {
+						SC_Socket* otherSoc = clients[u]->soc[(i + 1) % 2];
+						if (otherSoc->getIP() == client->getIP()) {//Found match
+							clients[u]->soc[i] = client;
+							clients[u]->thr[i] = (char*)new thread(&SC_Server::clientThread, this, u, (SC_SocType)i);
+							onConnect(u);//Call once fully connected
+							matched = true;
+							break;
+						}
+					}
+				}
+
+				if (matched) {
+					continue;
+				}
+
+				if (clientCount >= maxClients) {
+					client->disconnect();
+					delete client;
+					continue;
+				}
+
+				for (unsigned int u = 0; u < maxClients; u++) {//Look for open index
+					if (clients[u] == nullptr) {
+						if (i == 0) {
+							clients[u] = new SC_ClientHandle{ {nullptr, nullptr}, {client, nullptr}, false };
+						}else{
+							clients[u] = new SC_ClientHandle{ { nullptr, nullptr }, {nullptr, client}, false };
+						}
+						clientCount++;
+						clients[u]->thr[i] = (char*)new thread(&SC_Server::clientThread, this, u, (SC_SocType)i);
+						break;
+					}
+				}
+
 			}
+
 		}
 
 	}
 
 }
 
-void SC_Server::clientThread(unsigned int id) {
+void SC_Server::clientThread(unsigned int id, SC_SocType socType) {
 
-	Packet pack;
+	SC_Packet pack;
 	bool timeout = false;
 
 	while (true) {
@@ -148,48 +175,69 @@ void SC_Server::clientThread(unsigned int id) {
 			return;
 		}
 
-		if (!clients[id]->soc->hasData(50)) {
+		if (!clients[id]->soc[socType]->hasData(50)) {
 			continue;
 		}
 
-		pack = clients[id]->soc->receivePacket();
+		pack = clients[id]->soc[socType]->receivePacket();
 
-		if (pack == Packet_ERROR) {
-			timeout = true;
-			break;
+		if (pack == SC_Packet_ERROR) {
+			if (socType == SC_TCP) {
+				timeout = true;
+				break;
+			}else{
+				continue;
+			}
 		}
 
-		if (pack == Packet_DISCONNECT) {
-			break;
+		if (pack == SC_Packet_DISCONNECT) {
+			if (socType == SC_TCP) {
+				break;
+			}else{
+				continue;
+			}
 		}
 
 		switch (pack) {
-		case Packet_INT:
-			onInt(id, clients[id]->soc->receiveInt());
+		case SC_Packet_INT:
+			onInt(id, clients[id]->soc[socType]->receiveInt());
 			break;
-		case Packet_BYTES: {
+		case SC_Packet_BYTES: {
 			int len = 0;
-			onBytes(id, clients[id]->soc->receiveBytes(len), len);
+			onBytes(id, clients[id]->soc[socType]->receiveBytes(len), len);
 			}
 			break;
-		case Packet_STRING:
-			onString(id, clients[id]->soc->receiveStr());
+		case SC_Packet_STRING:
+			onString(id, clients[id]->soc[socType]->receiveStr());
 			break;
 		}
 
 	}
 
+	//ONLY TCP THREAD CAN REACH THIS AREA OF CODE BELOW
+
 	onDisconnect(id, timeout);//Call right before actual disconnection
 
-	clients[id]->soc->disconnect();
-	delete clients[id]->soc;
+	clients[id]->soc[SC_TCP]->disconnect();
+	delete clients[id]->soc[SC_TCP];
+	if (clients[id]->soc[SC_UDP] != nullptr) {//Stop UDP thread if exists
+
+		clients[id]->stopMe = true;
+		((thread*)clients[id]->thr[SC_UDP])->join();
+		clients[id]->stopMe = false;
+		delete clients[id]->thr[SC_UDP];
+
+		clients[id]->soc[SC_UDP]->disconnect();
+		delete clients[id]->soc[SC_UDP];
+
+	}
 	SC_ClientHandle* info = clients[id];//Hold so that it may be made null before deletion
 	clients[id] = nullptr;
 	clientCount--;//After setting to nullptr
-	thread* thr = (thread*)info->thr;
+	thread* tcp = (thread*)info->thr[SC_TCP];
 	delete info;
-	thr->detach();
-	delete thr;
+	tcp->detach();
+	delete tcp;
 
 }
 
@@ -200,36 +248,50 @@ void SC_Server::kick(unsigned int id) {
 	}
 
 	clients[id]->stopMe = true;
-	((thread*)clients[id]->thr)->join();
+	for (int i = 0; i < 2; i++) {//Close TCP/UDP threads
+		if (clients[id]->thr[i] != nullptr) {
+			((thread*)clients[id]->thr[i])->join();
+		}
+	}
 	clients[id]->stopMe = false;
 
 	onDisconnect(id, false);
 
-	clients[id]->soc->disconnect();
-	delete clients[id]->soc;
+	for (int i = 0; i < 2; i++) {
+		if (clients[id]->soc[i] != nullptr) {//Could possibly be unpaired
+			clients[id]->soc[i]->disconnect();
+			delete clients[id]->soc[i];
+		}
+	}
 
 	SC_ClientHandle* info = clients[id];
 	clients[id] = nullptr;
 	clientCount--;
-	thread* thr = (thread*)info->thr;
+	thread* tcp = (thread*)info->thr[SC_TCP];
+	thread* udp = (thread*)info->thr[SC_UDP];
 	delete info;
-	delete thr;
+	if (tcp != nullptr) {
+		delete tcp;
+	}
+	if (udp != nullptr) {
+		delete udp;
+	}
 
 }
 
 void SC_Server::kickAll() {
 
 	for (unsigned int i = 0; i < maxClients; i++) {
-		if (clients[i] != nullptr) {
-			kick(i);
-		}
+		//isValidID() not required, as it is in kick()
+		kick(i);
 	}
 
 }
 
 void SC_Server::setPort(int port) {
 
-	server.setPort(port);
+	server[SC_TCP].setPort(port);
+	server[SC_UDP].setPort(port);
 
 }
 

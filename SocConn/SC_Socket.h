@@ -15,12 +15,17 @@ Changing properties such as IP, port, or protocol require reconnection.
 #pragma comment(lib, "ws2_32.lib")
 #include <iostream>
 
-enum Packet {
-	Packet_ERROR,
-	Packet_INT,
-	Packet_BYTES,
-	Packet_STRING,
-	Packet_DISCONNECT
+enum SC_SocType {
+	SC_TCP,
+	SC_UDP
+};
+
+enum SC_Packet {
+	SC_Packet_ERROR,
+	SC_Packet_INT,
+	SC_Packet_BYTES,
+	SC_Packet_STRING,
+	SC_Packet_DISCONNECT
 };
 
 class SC_Socket {
@@ -42,7 +47,7 @@ public:
 	void send(std::string msg);
 	void send(const char* bytes, int length);
 
-	Packet receivePacket();
+	SC_Packet receivePacket();
 	int receiveInt();
 	std::string receiveStr();
 	char* receiveBytes(int& length);
@@ -68,7 +73,7 @@ private:
 	bool connected = false;
 	bool TCP = true;
 
-	void sendPacket(Packet pack);
+	void sendPacket(SC_Packet pack);
 
 	char* readfds = nullptr;
 

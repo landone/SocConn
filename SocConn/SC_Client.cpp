@@ -62,7 +62,7 @@ void SC_Client::disconnect() {
 
 void SC_Client::mainThread() {
 
-	Packet pack;
+	SC_Packet pack;
 	while (true) {
 
 		if (stopThreads) {
@@ -75,20 +75,20 @@ void SC_Client::mainThread() {
 
 		pack = me.receivePacket();
 
-		if (pack == Packet_ERROR || pack == Packet_DISCONNECT) {
+		if (pack == SC_Packet_ERROR || pack == SC_Packet_DISCONNECT) {
 			break;
 		}
 
 		switch (pack) {
-		case Packet_INT:
+		case SC_Packet_INT:
 			onInt(me.receiveInt());
 			break;
-		case Packet_BYTES: {
+		case SC_Packet_BYTES: {
 				int len = 0;
 				onBytes(me.receiveBytes(len), len);
 			}
 			break;
-		case Packet_STRING:
+		case SC_Packet_STRING:
 			onString(me.receiveStr());
 			break;
 		}

@@ -82,7 +82,7 @@ bool SC_Socket::hasData(long timeOut) {
 	return output > 0;
 }
 
-void SC_Socket::sendPacket(Packet pack) {
+void SC_Socket::sendPacket(SC_Packet pack) {
 
 	sendto(mySoc, (char*)&pack, sizeof(pack), 0, (SOCKADDR*)addr, sizeof(SOCKADDR_IN));
 
@@ -91,7 +91,7 @@ void SC_Socket::sendPacket(Packet pack) {
 void SC_Socket::disconnect() {
 
 	if (connected) {
-		sendPacket(Packet_DISCONNECT);
+		sendPacket(SC_Packet_DISCONNECT);
 		shutdown(mySoc, SD_SEND);
 		closesocket(mySoc);
 		connected = false;
@@ -101,19 +101,19 @@ void SC_Socket::disconnect() {
 
 void SC_Socket::send(int num) {
 
-	sendPacket(Packet_INT);
+	sendPacket(SC_Packet_INT);
 	sendto(mySoc, (char*)&num, sizeof(int), 0, (SOCKADDR*)addr, sizeof(SOCKADDR_IN));
 
 }
 
-Packet SC_Socket::receivePacket() {
+SC_Packet SC_Socket::receivePacket() {
 
-	char buf[sizeof(Packet)];
-	if (recv(mySoc, buf, sizeof(Packet), 0) == SOCKET_ERROR) {
-		return Packet_ERROR;
+	char buf[sizeof(SC_Packet)];
+	if (recv(mySoc, buf, sizeof(SC_Packet), 0) == SOCKET_ERROR) {
+		return SC_Packet_ERROR;
 	}
 
-	return *((Packet*)buf);
+	return *((SC_Packet*)buf);
 
 }
 
@@ -130,7 +130,7 @@ int SC_Socket::receiveInt() {
 
 char* SC_Socket::receiveBytes(int& length) {
 
-	if (receivePacket() != Packet_INT) {
+	if (receivePacket() != SC_Packet_INT) {
 		length = 0;
 		return nullptr;
 	}
@@ -153,7 +153,7 @@ char* SC_Socket::receiveBytes(int& length) {
 
 std::string SC_Socket::receiveStr() {
 
-	if (receivePacket() != Packet_INT) {
+	if (receivePacket() != SC_Packet_INT) {
 		return "";
 	}
 	int length = receiveInt();
@@ -176,7 +176,7 @@ std::string SC_Socket::receiveStr() {
 
 void SC_Socket::send(std::string msg) {
 
-	sendPacket(Packet_STRING);
+	sendPacket(SC_Packet_STRING);
 	send(msg.length());
 	sendto(mySoc, (char*)msg.c_str(), msg.length(), 0, (SOCKADDR*)addr, sizeof(SOCKADDR_IN));
 
@@ -184,7 +184,7 @@ void SC_Socket::send(std::string msg) {
 
 void SC_Socket::send(const char* bytes, int length) {
 
-	sendPacket(Packet_BYTES);
+	sendPacket(SC_Packet_BYTES);
 	send(length);
 	sendto(mySoc, bytes, length, 0, (SOCKADDR*)addr, sizeof(SOCKADDR_IN));
 
