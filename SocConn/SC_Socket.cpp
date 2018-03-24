@@ -248,8 +248,14 @@ bool SC_Socket::join() {
 	int addrSize = sizeof(SOCKADDR_IN);
 	if (connect(mySoc, (SOCKADDR*)addr, addrSize) != 0) {
 
-		cout << "SC_Socket Error : Failed to connect to address" << endl;
+		cout << "SC_Socket(" << (TCP ? "TCP" : "UDP") << ") Error : Failed to connect to address" << endl;
 		connected = false;
+
+		DWORD err = GetLastError();
+		LPTSTR Error = 0;
+		FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM, NULL, err, 0, (LPTSTR)&Error, 0, NULL);
+		cout << Error << endl;
+
 		return false;
 
 	}

@@ -4,13 +4,13 @@
 
 using namespace std;
 
-SC_Server::SC_Server(std::string ip, unsigned int port, unsigned int maxClients) : server{ (ip, port), (ip, port, false) } {
+SC_Server::SC_Server(std::string ip, unsigned int port, unsigned int maxClients) : server{ SC_Socket(ip, port, true), SC_Socket(ip, port, false) } {
 
 	setMaxClients(maxClients);//Also initiates/modifies clients array
 
 }
 
-SC_Server::SC_Server(unsigned int port, unsigned int maxClients) : server{ (port), (port, false) } {
+SC_Server::SC_Server(unsigned int port, unsigned int maxClients) : server{ SC_Socket(port, true), SC_Socket(port, false) } {
 	setMaxClients(maxClients);
 }
 

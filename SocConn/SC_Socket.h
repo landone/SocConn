@@ -31,7 +31,7 @@ enum SC_Packet {
 class SC_Socket {
 public:
 
-	SC_Socket(std::string ip, unsigned int port, bool TCP = true);
+	SC_Socket(std::string ip, unsigned int port, bool TCP);
 	SC_Socket(unsigned int port, bool TCP = true);
 	~SC_Socket();
 

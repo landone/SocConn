@@ -4,13 +4,15 @@
 
 using namespace std;
 
-SC_Client::SC_Client(std::string ip, unsigned int port) : me{ (ip, port), (ip, port, false) } {
+SC_Client::SC_Client(std::string ip, unsigned int port) : me{ SC_Socket(ip, port, true), SC_Socket(ip, port, false) } {
 
 	//Do nothing
+	cout << "me[0] = " << (me[0].isTCP() ? "TCP" : "UDP") << endl;
+	cout << "me[1] = " << (me[1].isTCP() ? "TCP" : "UDP") << endl;
 
 }
 
-SC_Client::SC_Client(unsigned int port) : me{ (port), (port, false) } {
+SC_Client::SC_Client(unsigned int port) : me{ SC_Socket(port, true), SC_Socket(port, false) } {
 
 	//Do nothing
 
