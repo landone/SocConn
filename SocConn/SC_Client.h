@@ -1,8 +1,8 @@
 /*
 
 	SC_Client
-	(TCP/IPV4)
-	---------
+	(TCP/UDP : IPV4)
+	----------------
 Abstract class that interprets sockets as a client would.
 Sends & receives packets with servers
 Functions for receiving data must be defined
@@ -12,6 +12,12 @@ Functions for receiving data must be defined
 #pragma once
 
 #include "SC_Socket.h"
+
+/*
+
+TODO: Make send/receive functions safe & supportive of UDP
+
+*/
 
 class SC_Client {
 public:
@@ -26,12 +32,12 @@ public:
 	void send(int val);
 	void send(const char* buf, int len);
 
-	std::string getIP() { return me.getIP(); }
-	int getPort() { return me.getPort(); }
-	bool isConnected() { return me.isConnected(); }
+	std::string getIP() { return me[SC_TCP].getIP(); }
+	int getPort() { return me[SC_TCP].getPort(); }
+	bool isConnected() { return me[SC_TCP].isConnected(); }
 
-	void setIP(std::string ip) { me.setIP(ip); }
-	void setPort(int port) { me.setPort(port); }
+	void setIP(std::string ip) { me[SC_TCP].setIP(ip); me[SC_UDP].setIP(ip); }
+	void setPort(int port) { me[SC_TCP].setPort(port); me[SC_UDP].setPort(port); }
 
 protected:
 
@@ -41,10 +47,10 @@ protected:
 
 private:
 
-	SC_Socket me;
+	SC_Socket me[2];
 	bool stopThreads = false;
 
-	char* mainThr = nullptr;//Thread
-	void mainThread();
+	char* mainThr[2] = { nullptr, nullptr };//TCP & UDP threads
+	void mainThread(SC_SocType type);
 
 };
