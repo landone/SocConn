@@ -7,8 +7,6 @@ using namespace std;
 SC_Client::SC_Client(std::string ip, unsigned int port) : me{ SC_Socket(ip, port, true), SC_Socket(ip, port, false) } {
 
 	//Do nothing
-	cout << "me[0] = " << (me[0].isTCP() ? "TCP" : "UDP") << endl;
-	cout << "me[1] = " << (me[1].isTCP() ? "TCP" : "UDP") << endl;
 
 }
 
@@ -18,21 +16,21 @@ SC_Client::SC_Client(unsigned int port) : me{ SC_Socket(port, true), SC_Socket(p
 
 }
 
-void SC_Client::send(std::string msg) {
+void SC_Client::send(std::string msg, bool TCP) {
 
-	me[SC_TCP].send(msg);
-
-}
-
-void SC_Client::send(int val) {
-
-	me[SC_TCP].send(val);
+	me[TCP ? SC_TCP : SC_UDP].send(msg);
 
 }
 
-void SC_Client::send(const char* buf, int len) {
+void SC_Client::send(int val, bool TCP) {
 
-	me[SC_TCP].send(buf, len);
+	me[TCP ? SC_TCP : SC_UDP].send(val);
+
+}
+
+void SC_Client::send(const char* buf, int len, bool TCP) {
+
+	me[TCP ? SC_TCP : SC_UDP].send(buf, len);
 
 }
 

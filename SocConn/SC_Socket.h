@@ -28,11 +28,16 @@ enum SC_Packet {
 	SC_Packet_DISCONNECT
 };
 
+struct SC_ADDR {
+	unsigned long ip;
+	unsigned short port;
+};
+
 class SC_Socket {
 public:
 
 	SC_Socket(std::string ip, unsigned int port, bool TCP);
-	SC_Socket(unsigned int port, bool TCP = true);
+	SC_Socket(unsigned int port, bool TCP);
 	~SC_Socket();
 
 	static void cleanUpAll();
@@ -43,9 +48,9 @@ public:
 	void disconnect();
 	bool hasData(long timeout);
 
-	void send(int val);
-	void send(std::string msg);
-	void send(const char* bytes, int length);
+	void send(int val, SC_ADDR client = { NULL, NULL });
+	void send(std::string msg, SC_ADDR client = { NULL, NULL });
+	void send(const char* bytes, int length, SC_ADDR client = { NULL, NULL });
 
 	SC_Packet receivePacket();
 	int receiveInt();
@@ -60,16 +65,14 @@ public:
 	bool isTCP() { return TCP; }
 	std::string getIP() { return ip; }
 	int getPort() { return port; }
+	SC_ADDR getLastAddr();
 
 private:
 
 	unsigned int mySoc;
-	char* addr = nullptr;
 
 	static bool wsaEnabled;
 
-	std::string ip;
-	unsigned int port;
 	bool connected = false;
 	bool TCP = true;
 
@@ -78,6 +81,9 @@ private:
 	char* readfds = nullptr;
 
 protected:
-	SC_Socket(unsigned int socket, char* extraParam);
-
+	SC_Socket(unsigned int socket);
+	char* addr = nullptr;
+	char* recvAddr = nullptr;
+	std::string ip;
+	unsigned int port;
 };

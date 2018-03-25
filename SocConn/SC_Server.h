@@ -14,12 +14,6 @@ Functions for receiving data must be defined
 
 #include "SC_Socket.h"
 
-/*
-
-TODO: Make send/receive functions safe & supportive of UDP
-
-*/
-
 class SC_Server {
 public:
 
@@ -30,23 +24,25 @@ public:
 	void start();
 	void stop();
 
-	void send(int client, std::string msg);
-	void send(int client, int val);
-	void send(int client, const char* buf, int len);
+	void send(int client, std::string msg, bool TCP = true);
+	void send(int client, int val, bool TCP = true);
+	void send(int client, const char* buf, int len, bool TCP = true);
 
-	void sendToAll(std::string msg);
-	void sendToAll(int val);
-	void sendToAll(const char* buf, int len);
+	void sendToAll(std::string msg, bool TCP = true);
+	void sendToAll(int val, bool TCP = true);
+	void sendToAll(const char* buf, int len, bool TCP = true);
 
 	void kick(unsigned int clientID);
 	void kickAll();
 
 	bool isRunning() {
-		return server[0].isConnected();
+		return server[SC_TCP].isConnected();
 	}
 	int getClientCount() { return clientCount; }
 	int getMaxClients() { return maxClients; }
-	int getPort() { return server[0].getPort(); }
+	std::string getClientIP(unsigned int clientID) { return clients[clientID]->soc->getIP(); }
+	int getClientPort(unsigned int clientID) { return clients[clientID]->soc->getPort(); }
+	int getPort() { return server[SC_TCP].getPort(); }
 
 	void setPort(int port);
 	void setMaxClients(unsigned int maxClients);
@@ -62,8 +58,9 @@ protected:
 private:
 
 	struct SC_ClientHandle {
-		char* thr[2];
-		SC_Socket* soc[2];
+		char* thr;
+		SC_Socket* soc;
+		SC_ADDR addr;
 		bool stopMe;
 	};
 
@@ -74,12 +71,14 @@ private:
 
 	SC_Socket server[2];
 	char* connThr;
+	char* udpThr;
 
 	SC_ClientHandle** clients = nullptr;
 	unsigned int clientCount = 0;
 	bool isValidID(unsigned int id);
 
 	void connectThread();
-	void clientThread(unsigned int id, SC_SocType socType);
+	void udpThread();
+	void clientThread(unsigned int id);
 
 };

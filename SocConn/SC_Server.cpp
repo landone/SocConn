@@ -22,53 +22,81 @@ SC_Server::~SC_Server() {
 
 }
 
-void SC_Server::send(int id, string msg) {
+void SC_Server::send(int id, string msg, bool TCP) {
 
 	if (!isValidID(id)) {
 		return;
 	}
-	clients[id]->soc[SC_TCP]->send(msg);
+	if (TCP) {
+		clients[id]->soc->send(msg);
+	}
+	else {
+		server[SC_UDP].send(msg, clients[id]->addr);
+	}
 
 }
 
-void SC_Server::send(int id, int val) {
+void SC_Server::send(int id, int val, bool TCP) {
 
 	if (!isValidID(id)) {
 		return;
 	}
-	clients[id]->soc[SC_TCP]->send(val);
+	if (TCP) {
+		clients[id]->soc->send(val);
+	}
+	else {
+		server[SC_UDP].send(val, clients[id]->addr);
+	}
 
 }
 
-void SC_Server::send(int id, const char* buf, int len) {
+void SC_Server::send(int id, const char* buf, int len, bool TCP) {
 
 	if (!isValidID(id)) {
 		return;
 	}
-	clients[id]->soc[SC_TCP]->send(buf, len);
+	if (TCP) {
+		clients[id]->soc->send(buf, len);
+	}else {
+		server[SC_UDP].send(buf, len, clients[id]->addr);
+	}
 
 }
 
-void SC_Server::sendToAll(string msg) {
+void SC_Server::sendToAll(string msg, bool TCP) {
 	for (unsigned int i = 0; i < maxClients; i++) {
 		if (clients[i] != nullptr) {
-			clients[i]->soc[SC_TCP]->send(msg);
+			if (TCP) {
+				clients[i]->soc->send(msg);
+			}
+			else {
+				server[SC_UDP].send(msg, clients[i]->addr);
+			}
 		}
 	}
 }
 
-void SC_Server::sendToAll(int val) {
+void SC_Server::sendToAll(int val, bool TCP) {
 	for (unsigned int i = 0; i < maxClients; i++) {
 		if (clients[i] != nullptr) {
-			clients[i]->soc[SC_TCP]->send(val);
+			if (TCP) {
+				clients[i]->soc->send(val);
+			}
+			else {
+				server[SC_UDP].send(val, clients[i]->addr);
+			}
 		}
 	}
 }
 
-void SC_Server::sendToAll(const char* buf, int len) {
+void SC_Server::sendToAll(const char* buf, int len, bool TCP) {
 	for (unsigned int i = 0; i < maxClients; i++) {
 		if (clients[i] != nullptr) {
-			clients[i]->soc[SC_TCP]->send(buf, len);
+			if (TCP) {
+				clients[i]->soc->send(buf, len);
+			}else{
+				server[SC_UDP].send(buf, len, clients[i]->addr);
+			}
 		}
 	}
 }
@@ -79,6 +107,7 @@ void SC_Server::start() {
 		server[SC_TCP].open();
 		server[SC_UDP].open();
 		connThr = (char*)new thread(&SC_Server::connectThread, this);
+		udpThr = (char*)new thread(&SC_Server::udpThread, this);
 	}
 
 }
@@ -89,8 +118,10 @@ void SC_Server::stop() {
 
 		stopThreads = true;
 		((thread*)connThr)->join();
+		((thread*)udpThr)->join();
 		stopThreads = false;
 		delete (thread*)connThr;
+		delete (thread*)udpThr;
 
 		kickAll();
 
@@ -110,52 +141,26 @@ void SC_Server::connectThread() {//Accepts new connections
 			return;
 		}
 
-		for (unsigned int i = 0; i < 2; i++) {//Go through both TCP & UDP
+		if (server[SC_TCP].hasData(50)) {
+			client = server[SC_TCP].acquire();
+			if (client == nullptr) {
+				continue;
+			}
 
-			if (server[i].hasData(50)) {
+			if (clientCount >= maxClients) {
+				client->disconnect();
+				delete client;
+				continue;
+			}
 
-				client = server[i].acquire();
-				if (client == nullptr) {
-					continue;
+			for (unsigned int u = 0; u < maxClients; u++) {//Look for open index
+				if (clients[u] == nullptr) {
+					clients[u] = new SC_ClientHandle{ nullptr, client, client->getLastAddr(), false };
+					clientCount++;
+					onConnect(u);
+					clients[u]->thr = (char*)new thread(&SC_Server::clientThread, this, u);
+					break;
 				}
-
-				bool matched = false;
-				for (unsigned int u = 0; u < maxClients; u++) {//Look for matching alternate socket
-					if (clients[u] != nullptr && clients[u]->soc[i] == nullptr) {
-						SC_Socket* otherSoc = clients[u]->soc[(i + 1) % 2];
-						if (otherSoc->getIP() == client->getIP()) {//Found match
-							clients[u]->soc[i] = client;
-							clients[u]->thr[i] = (char*)new thread(&SC_Server::clientThread, this, u, (SC_SocType)i);
-							onConnect(u);//Call once fully connected
-							matched = true;
-							break;
-						}
-					}
-				}
-
-				if (matched) {
-					continue;
-				}
-
-				if (clientCount >= maxClients) {
-					client->disconnect();
-					delete client;
-					continue;
-				}
-
-				for (unsigned int u = 0; u < maxClients; u++) {//Look for open index
-					if (clients[u] == nullptr) {
-						if (i == 0) {
-							clients[u] = new SC_ClientHandle{ {nullptr, nullptr}, {client, nullptr}, false };
-						}else{
-							clients[u] = new SC_ClientHandle{ { nullptr, nullptr }, {nullptr, client}, false };
-						}
-						clientCount++;
-						clients[u]->thr[i] = (char*)new thread(&SC_Server::clientThread, this, u, (SC_SocType)i);
-						break;
-					}
-				}
-
 			}
 
 		}
@@ -164,7 +169,65 @@ void SC_Server::connectThread() {//Accepts new connections
 
 }
 
-void SC_Server::clientThread(unsigned int id, SC_SocType socType) {
+void SC_Server::udpThread() {
+
+	SC_Packet pack;
+	SC_ADDR addr;
+
+	while (true) {
+
+		if (stopThreads) {
+			return;
+		}
+
+		if (!server[SC_UDP].hasData(50)) {
+			continue;
+		}
+
+		std::cout << "UDP FOUND DATA\n";
+
+		pack = server[SC_UDP].receivePacket();
+		addr = server[SC_UDP].getLastAddr();
+
+		std::cout << "pack = " << pack << std::endl;
+
+		if (pack == SC_Packet_ERROR || pack == SC_Packet_DISCONNECT) {
+			continue;
+		}
+
+		std::cout << "DEBUG\n";
+
+		int id = -1;
+		for (unsigned int i = 0; i < maxClients; i++) {//Find address corresponding client
+
+			if (clients[id]->addr.ip == addr.ip && clients[id]->addr.port == addr.port) {
+				id = i;
+				break;
+			}
+
+		}
+
+		std::cout << "ID: " << id << std::endl;
+
+		switch (pack) {
+		case SC_Packet_INT:
+			onInt(id, server[SC_UDP].receiveInt());
+			break;
+		case SC_Packet_BYTES: {
+			int len = 0;
+			onBytes(id, server[SC_UDP].receiveBytes(len), len);
+			}
+			break;
+		case SC_Packet_STRING:
+			onString(id, server[SC_UDP].receiveStr());
+			break;
+		}
+
+	}
+
+}
+
+void SC_Server::clientThread(unsigned int id) {
 
 	SC_Packet pack;
 	bool timeout = false;
@@ -175,66 +238,46 @@ void SC_Server::clientThread(unsigned int id, SC_SocType socType) {
 			return;
 		}
 
-		if (!clients[id]->soc[socType]->hasData(50)) {
+		if (!clients[id]->soc->hasData(50)) {
 			continue;
 		}
 
-		pack = clients[id]->soc[socType]->receivePacket();
+		pack = clients[id]->soc->receivePacket();
 
 		if (pack == SC_Packet_ERROR) {
-			if (socType == SC_TCP) {
-				timeout = true;
-				break;
-			}else{
-				continue;
-			}
+			timeout = true;
+			break;
 		}
 
 		if (pack == SC_Packet_DISCONNECT) {
-			if (socType == SC_TCP) {
-				break;
-			}else{
-				continue;
-			}
+			break;
 		}
 
 		switch (pack) {
 		case SC_Packet_INT:
-			onInt(id, clients[id]->soc[socType]->receiveInt());
+			onInt(id, clients[id]->soc->receiveInt());
 			break;
 		case SC_Packet_BYTES: {
 			int len = 0;
-			onBytes(id, clients[id]->soc[socType]->receiveBytes(len), len);
+			onBytes(id, clients[id]->soc->receiveBytes(len), len);
 			}
 			break;
 		case SC_Packet_STRING:
-			onString(id, clients[id]->soc[socType]->receiveStr());
+			onString(id, clients[id]->soc->receiveStr());
 			break;
 		}
 
 	}
 
-	//ONLY TCP THREAD CAN REACH THIS AREA OF CODE BELOW
-
 	onDisconnect(id, timeout);//Call right before actual disconnection
 
-	clients[id]->soc[SC_TCP]->disconnect();
-	delete clients[id]->soc[SC_TCP];
-	if (clients[id]->soc[SC_UDP] != nullptr) {//Stop UDP thread if exists
-
-		clients[id]->stopMe = true;
-		((thread*)clients[id]->thr[SC_UDP])->join();
-		clients[id]->stopMe = false;
-		delete clients[id]->thr[SC_UDP];
-
-		clients[id]->soc[SC_UDP]->disconnect();
-		delete clients[id]->soc[SC_UDP];
-
-	}
+	clients[id]->soc->disconnect();
+	delete clients[id]->soc;
+	
 	SC_ClientHandle* info = clients[id];//Hold so that it may be made null before deletion
 	clients[id] = nullptr;
 	clientCount--;//After setting to nullptr
-	thread* tcp = (thread*)info->thr[SC_TCP];
+	thread* tcp = (thread*)info->thr;
 	delete info;
 	tcp->detach();
 	delete tcp;
@@ -248,33 +291,21 @@ void SC_Server::kick(unsigned int id) {
 	}
 
 	clients[id]->stopMe = true;
-	for (int i = 0; i < 2; i++) {//Close TCP/UDP threads
-		if (clients[id]->thr[i] != nullptr) {
-			((thread*)clients[id]->thr[i])->join();
-		}
-	}
+	((thread*)clients[id]->thr)->join();
 	clients[id]->stopMe = false;
 
 	onDisconnect(id, false);
 
-	for (int i = 0; i < 2; i++) {
-		if (clients[id]->soc[i] != nullptr) {//Could possibly be unpaired
-			clients[id]->soc[i]->disconnect();
-			delete clients[id]->soc[i];
-		}
-	}
+	clients[id]->soc->disconnect();
+	delete clients[id]->soc;
 
 	SC_ClientHandle* info = clients[id];
 	clients[id] = nullptr;
 	clientCount--;
-	thread* tcp = (thread*)info->thr[SC_TCP];
-	thread* udp = (thread*)info->thr[SC_UDP];
+	thread* tcp = (thread*)info->thr;
 	delete info;
 	if (tcp != nullptr) {
 		delete tcp;
-	}
-	if (udp != nullptr) {
-		delete udp;
 	}
 
 }

@@ -11,7 +11,7 @@ void SC_Socket::cleanUpAll() {
 
 }
 
-SC_Socket::SC_Socket(unsigned int socket, char* extraParam) {
+SC_Socket::SC_Socket(unsigned int socket) {
 
 	mySoc = socket;
 	connected = true;
@@ -23,14 +23,24 @@ SC_Socket::SC_Socket(unsigned int socket, char* extraParam) {
 	TCP = (type == SOCK_STREAM);
 
 	struct sockaddr_in ad;
-	len = 0;
+	len = sizeof(ad);
 	getpeername(mySoc, (struct sockaddr*)&ad, &len);
 
 	addr = (char*)new SOCKADDR_IN(ad);
+	recvAddr = (char*)new SOCKADDR_IN(ad);
 
 	this->ip = inet_ntoa((in_addr)ad.sin_addr);
 	this->port = ntohs(ad.sin_port);
 	
+}
+
+SC_ADDR SC_Socket::getLastAddr() {
+
+	SC_ADDR output;
+	output.ip = ((SOCKADDR_IN*)recvAddr)->sin_addr.s_addr;
+	output.port = ((SOCKADDR_IN*)recvAddr)->sin_port;
+	return output;
+
 }
 
 SC_Socket::SC_Socket(unsigned int port, bool TCP) : SC_Socket("127.0.0.1", port, TCP) {
@@ -63,11 +73,15 @@ SC_Socket::SC_Socket(string ip, unsigned int port, bool TCP) {
 	((SOCKADDR_IN*)addr)->sin_port = htons(port);
 	((SOCKADDR_IN*)addr)->sin_family = AF_INET;//IPv4
 
+	recvAddr = (char*)new SOCKADDR_IN;
+	*recvAddr = *addr;//Set equal values
+
 }
 
 SC_Socket::~SC_Socket() {
 
 	delete ((SOCKADDR_IN*)addr);
+	delete ((SOCKADDR_IN*)recvAddr);
 	delete (fd_set*)readfds;
 
 }
@@ -84,7 +98,7 @@ bool SC_Socket::hasData(long timeOut) {
 
 void SC_Socket::sendPacket(SC_Packet pack) {
 
-	sendto(mySoc, (char*)&pack, sizeof(pack), 0, (SOCKADDR*)addr, sizeof(SOCKADDR_IN));
+	sendto(mySoc, (char*)&pack, sizeof(SC_Packet), 0, (SOCKADDR*)addr, sizeof(SOCKADDR_IN));
 
 }
 
@@ -99,18 +113,26 @@ void SC_Socket::disconnect() {
 
 }
 
-void SC_Socket::send(int num) {
-
-	sendPacket(SC_Packet_INT);
-	sendto(mySoc, (char*)&num, sizeof(int), 0, (SOCKADDR*)addr, sizeof(SOCKADDR_IN));
-
-}
-
 SC_Packet SC_Socket::receivePacket() {
 
 	char buf[sizeof(SC_Packet)];
-	if (recv(mySoc, buf, sizeof(SC_Packet), 0) == SOCKET_ERROR) {
-		return SC_Packet_ERROR;
+	if (TCP) {
+		if (recv(mySoc, buf, sizeof(SC_Packet), 0) == SOCKET_ERROR) {
+			return SC_Packet_ERROR;
+		}
+	}
+	else {
+		int len = sizeof(sockaddr_in);
+		if (recvfrom(mySoc, buf, sizeof(SC_Packet), 0, (struct sockaddr*)recvAddr, &len) == SOCKET_ERROR) {
+
+			DWORD err = GetLastError();
+			LPTSTR Error = 0;
+			FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM, NULL, err, 0, (LPTSTR)&Error, 0, NULL);
+			cout << Error << endl;
+
+			return SC_Packet_ERROR;
+		}
+		
 	}
 
 	return *((SC_Packet*)buf);
@@ -120,8 +142,16 @@ SC_Packet SC_Socket::receivePacket() {
 int SC_Socket::receiveInt() {
 
 	char buf[sizeof(int)];
-	if (recv(mySoc, buf, sizeof(int), 0) == SOCKET_ERROR) {
-		return -1;
+	if (TCP) {
+		if (recv(mySoc, buf, sizeof(int), 0) == SOCKET_ERROR) {
+			return -1;
+		}
+	}
+	else {
+		int len = sizeof(sockaddr_in);
+		if (recvfrom(mySoc, buf, sizeof(int), 0, (struct sockaddr*)recvAddr, &len) == SOCKET_ERROR) {
+			return -1;
+		}
 	}
 
 	return *((int*)buf);
@@ -130,21 +160,26 @@ int SC_Socket::receiveInt() {
 
 char* SC_Socket::receiveBytes(int& length) {
 
-	if (receivePacket() != SC_Packet_INT) {
-		length = 0;
-		return nullptr;
-	}
 	length = receiveInt();
-	std::cout << "Byte Amount: " << length << std::endl;
 	if (length < 0) {
 		return nullptr;
 	}
 
 	char* buf = new char[length];
-	if (recv(mySoc, buf, length, 0) == SOCKET_ERROR) {
-		delete[] buf;
-		length = 0;
-		return nullptr;
+	if (TCP) {
+		if (recv(mySoc, buf, length, 0) == SOCKET_ERROR) {
+			delete[] buf;
+			length = 0;
+			return nullptr;
+		}
+	}
+	else {
+		int len = sizeof(sockaddr_in);
+		if (recvfrom(mySoc, buf, length, 0, (struct sockaddr*)recvAddr, &len) == SOCKET_ERROR) {
+			delete[] buf;
+			length = 0;
+			return nullptr;
+		}
 	}
 
 	return buf;
@@ -153,18 +188,24 @@ char* SC_Socket::receiveBytes(int& length) {
 
 std::string SC_Socket::receiveStr() {
 
-	if (receivePacket() != SC_Packet_INT) {
-		return "";
-	}
 	int length = receiveInt();
 	if (length < 0) {
 		return "";
 	}
 	
 	char* buf = new char[length+1];
-	if (recv(mySoc, buf, length, 0) == SOCKET_ERROR) {
-		delete[] buf;
-		return "";
+	if (TCP) {
+		if (recv(mySoc, buf, length, 0) == SOCKET_ERROR) {
+			delete[] buf;
+			return "";
+		}
+	}
+	else {
+		int len = sizeof(sockaddr_in);
+		if (recvfrom(mySoc, buf, length, 0, (struct sockaddr*)recvAddr, &len) == SOCKET_ERROR) {
+			delete[] buf;
+			return "";
+		}
 	}
 
 	buf[length] = '\0';
@@ -174,19 +215,70 @@ std::string SC_Socket::receiveStr() {
 
 }
 
-void SC_Socket::send(std::string msg) {
+void SC_Socket::send(int num, SC_ADDR client) {
 
-	sendPacket(SC_Packet_STRING);
-	send(msg.length());
-	sendto(mySoc, (char*)msg.c_str(), msg.length(), 0, (SOCKADDR*)addr, sizeof(SOCKADDR_IN));
+	char buf[sizeof(SC_Packet) + sizeof(int)];
+	SC_Packet pack = SC_Packet_INT;
+	memcpy(buf, &pack, sizeof(SC_Packet));
+	memcpy(&buf[sizeof(SC_Packet)], &num, sizeof(int));
+
+	if (client.ip == NULL) {
+		sendto(mySoc, buf, sizeof(SC_Packet) + sizeof(int), 0, (SOCKADDR*)addr, sizeof(SOCKADDR_IN));
+	}
+	else {
+		SOCKADDR_IN receiver;
+		receiver.sin_addr.s_addr = client.ip;
+		receiver.sin_port = client.port;
+		receiver.sin_family = AF_INET;//IPv4
+		sendto(mySoc, buf, sizeof(SC_Packet) + sizeof(int), 0, (SOCKADDR*)&receiver, sizeof(SOCKADDR_IN));
+	}
 
 }
 
-void SC_Socket::send(const char* bytes, int length) {
+void SC_Socket::send(std::string msg, SC_ADDR client) {
 
-	sendPacket(SC_Packet_BYTES);
-	send(length);
-	sendto(mySoc, bytes, length, 0, (SOCKADDR*)addr, sizeof(SOCKADDR_IN));
+	char* buf = new char[sizeof(SC_Packet) + sizeof(int) + msg.length()];
+	int len = msg.length();
+	SC_Packet pack = SC_Packet_STRING;
+	memcpy(buf, &pack, sizeof(SC_Packet));
+	memcpy(&buf[sizeof(SC_Packet)], &len, sizeof(int));
+	memcpy(&buf[sizeof(SC_Packet) + sizeof(int)], msg.c_str(), msg.length());
+
+	if (client.ip == NULL) {
+		sendto(mySoc, buf, sizeof(SC_Packet) + sizeof(int) + msg.length(), 0, (SOCKADDR*)addr, sizeof(SOCKADDR_IN));
+	}
+	else {
+		SOCKADDR_IN receiver;
+		receiver.sin_addr.s_addr = client.ip;
+		receiver.sin_port = client.port;
+		receiver.sin_family = AF_INET;//IPv4
+		sendto(mySoc, buf, sizeof(SC_Packet) + sizeof(int) + msg.length(), 0, (SOCKADDR*)&receiver, sizeof(SOCKADDR_IN));
+	}
+
+	delete[] buf;
+
+}
+
+void SC_Socket::send(const char* bytes, int length, SC_ADDR client) {
+
+	char* buf = new char[sizeof(SC_Packet) + sizeof(int) + length];
+	SC_Packet pack = SC_Packet_BYTES;
+	memcpy(buf, &pack, sizeof(SC_Packet));
+	memcpy(&buf[sizeof(SC_Packet)], &length, sizeof(int));
+	memcpy(&buf[sizeof(SC_Packet) + sizeof(int)], bytes, length);
+
+	if (client.ip == NULL) {
+		sendto(mySoc, buf, sizeof(SC_Packet) + sizeof(int) + length, 0, (SOCKADDR*)addr, sizeof(SOCKADDR_IN));
+	}
+	else {
+		SOCKADDR_IN receiver;
+		receiver.sin_addr.s_addr = client.ip;
+		receiver.sin_port = client.port;
+		receiver.sin_family = AF_INET;//IPv4
+		sendto(mySoc, buf, sizeof(SC_Packet) + sizeof(int) + length, 0, (SOCKADDR*)&receiver, sizeof(SOCKADDR_IN));
+	}
+
+	delete[] buf;
 
 }
 
@@ -231,7 +323,7 @@ SC_Socket* SC_Socket::acquire() {
 		return nullptr;
 	}
 	
-	return new SC_Socket(newConn, nullptr);
+	return new SC_Socket(newConn);
 
 }
 

@@ -13,12 +13,6 @@ Functions for receiving data must be defined
 
 #include "SC_Socket.h"
 
-/*
-
-TODO: Make send/receive functions safe & supportive of UDP
-
-*/
-
 class SC_Client {
 public:
 
@@ -28,9 +22,9 @@ public:
 	bool connect();
 	void disconnect();
 
-	void send(std::string msg);
-	void send(int val);
-	void send(const char* buf, int len);
+	void send(std::string msg, bool TCP = true);
+	void send(int val, bool TCP = true);
+	void send(const char* buf, int len, bool TCP = true);
 
 	std::string getIP() { return me[SC_TCP].getIP(); }
 	int getPort() { return me[SC_TCP].getPort(); }
